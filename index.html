@@ -42,7 +42,17 @@ input,select{font-size:16px}
 /* En-tête */
 .top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:16px}
 .top small{display:block;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--blue)}
-.top h1{margin:2px 0 0;font-family:var(--display);font-weight:400;font-size:40px;line-height:.95;letter-spacing:.01em}
+.top h1{margin:2px 0 0;font-family:var(--display);font-weight:400;font-size:clamp(30px,9vw,40px);white-space:nowrap;line-height:.95;letter-spacing:.01em}
+.tr-r{display:flex;gap:8px;align-items:stretch}
+.bell{width:46px;border-radius:14px;border:1px solid var(--line);background:var(--s1);display:grid;place-items:center;color:var(--muted);padding:0;position:relative}
+.bell svg{width:21px;height:21px}
+.bell.on{color:var(--green)}
+.bell.on::after{content:"";position:absolute;top:9px;right:10px;width:7px;height:7px;border-radius:50%;background:var(--green)}
+.nst{display:flex;gap:10px;align-items:center;background:var(--s2);border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:14px;color:var(--muted)}
+.nst b{color:var(--ink)}
+.nst i{width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:var(--dim)}
+.nst.on i{background:var(--green)}
+.urlin{width:100%;background:var(--s2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px}
 .lvl{display:grid;gap:5px;justify-items:end;background:var(--s1);border:1px solid var(--line);border-radius:14px;padding:8px 12px;min-width:96px}
 .lvl b{font-size:13px;font-weight:800;display:flex;gap:6px;align-items:center}
 .lvl b i{font-style:normal;color:var(--violet)}
@@ -228,7 +238,8 @@ h2.h em{font-style:normal;letter-spacing:0;text-transform:none;font-weight:600;c
 <div class="app">
   <header class="top">
     <div><small id="kick"></small><h1 id="title"></h1></div>
-    <button class="lvl" id="lvl" aria-label="Voir mon niveau"><b>Niv. <span id="lvN">1</span> <i id="lvR"></i></b><div class="bar"><u id="lvB" style="width:0"></u></div></button>
+    <div class="tr-r"><button class="bell" id="bell" aria-label="Notifications"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></button>
+    <button class="lvl" id="lvl" aria-label="Voir mon niveau"><b>Niv. <span id="lvN">1</span> <i id="lvR"></i></b><div class="bar"><u id="lvB" style="width:0"></u></div></button></div>
   </header>
 
   <section id="v-today"></section>
@@ -642,10 +653,52 @@ function confetti(){
     if(++f<170)requestAnimationFrame(tick);else x.clearRect(0,0,W,H)})();
 }
 
+/* ---------- Notifications (Web Push via n8n) ---------- */
+const VAPID_PUBLIC="BM3j90XadreXtuC92MFuwdD6UqKxrs3Qw6QjpMdyjjGR5abWM_2nyo9crbtqDAl4vfv6W4hlwoY5N9x7ONP6xTA";
+const DEFAULT_HOOK="https://opralia-n8n.com/webhook/planning-abonnement";
+const isStandalone=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const pushOK=()=>"serviceWorker" in navigator&&"PushManager" in window&&"Notification" in window;
+const getHook=()=>{try{return localStorage.getItem("planning-hook")||DEFAULT_HOOK}catch(e){return DEFAULT_HOOK}};
+const notifOn=()=>{try{return localStorage.getItem("planning-notif")==="1"&&Notification.permission==="granted"}catch(e){return false}};
+function b64uToBytes(s){s=s.replace(/-/g,"+").replace(/_/g,"/");while(s.length%4)s+="=";const r=atob(s),o=new Uint8Array(r.length);for(let i=0;i<r.length;i++)o[i]=r.charCodeAt(i);return o}
+function paintBell(){$("bell").classList.toggle("on",pushOK()&&notifOn())}
+function openNotif(){
+  const ok=pushOK(),st=isStandalone(),on=ok&&notifOn();
+  let state=on?'<div class="nst on"><i></i><span><b>Activées sur cet appareil</b><br>Tes prières et ton sport arrivent avec l\'icône Planning.</span></div>'
+    :!st?'<div class="nst"><i></i><span><b>Ouvre l\'appli depuis ton écran d\'accueil</b><br>Sur iPhone, les notifications ne marchent que dans l\'appli installée (icône Planning), pas dans Safari ni dans Claude.</span></div>'
+    :!ok?'<div class="nst"><i></i><span><b>Pas disponible ici</b><br>Il faut iOS 16.4 ou plus récent.</span></div>'
+    :'<div class="nst"><i></i><span><b>Pas encore activées</b><br>Appuie sur le bouton et accepte la demande de l\'iPhone.</span></div>';
+  $("sheet").innerHTML=`<div class="grab"></div><h3 id="shT">Notifications</h3>${state}
+    <div class="fl"><label for="hook">Adresse du webhook n8n</label><input class="urlin" id="hook" value="${esc(getHook())}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url"></div>
+    <p class="note">Rappels envoyés par ton n8n : les 5 prières aux horaires de la Mosquée de la Fontaine du Bac, et le sport à 19 h 30.</p>
+    <div class="acts"><button class="btn ghost" id="nClose">Fermer</button><button class="btn" id="nGo"${st&&ok?"":" disabled style=\"opacity:.5\""}>${on?"Envoyer un test":"Activer"}</button></div>`;
+  $("scrim").hidden=false;$("sheet").hidden=false;F=null;
+  requestAnimationFrame(()=>{$("scrim").classList.add("show");$("sheet").classList.add("show")});
+  $("nClose").onclick=closeSheet;
+  $("nGo").onclick=enablePush;
+}
+async function enablePush(){
+  const btn=$("nGo"),hook=$("hook").value.trim();
+  try{localStorage.setItem("planning-hook",hook)}catch(e){}
+  btn.disabled=true;btn.textContent="…";
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=="granted")throw new Error("Tu as refusé les notifications. Va dans Réglages › Notifications › Planning pour les autoriser.");
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uToBytes(VAPID_PUBLIC)});
+    const r=await fetch(hook,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subscription:sub.toJSON(),device:navigator.userAgent})});
+    if(!r.ok)throw new Error("n8n a répondu "+r.status+". Vérifie que le workflow est activé et l'adresse du webhook.");
+    try{localStorage.setItem("planning-notif","1")}catch(e){}
+    closeSheet();paintBell();toast("C'est bon ✅ Une notif de test arrive");
+  }catch(e){btn.disabled=false;btn.textContent="Réessayer";toast(e.message&&e.message.length<90?e.message:"Impossible de joindre n8n. Vérifie l'adresse.");}
+}
+$("bell").onclick=openNotif;
+
 /* ---------- Démarrage ---------- */
 setInterval(()=>{if(db.focus)renderPlayer();if(view==="today"&&db.focus){const s=stateOf(db.focus.k,db.focus.key);if(s&&s.startedAt&&Date.now()%60000<1000)renderToday()}},1000);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)renderAll()});
-renderAll();checkLevel(0);
+renderAll();checkLevel(0);paintBell();
 if("serviceWorker" in navigator&&location.hostname.endsWith("github.io"))navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 </body>
